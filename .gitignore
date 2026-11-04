@@ -3,9 +3,11 @@
 
 # ── 工具/环境 ──
 .claude/
+.workbuddy/          # 工作区数据（记忆、任务记录），属本地状态，不入库
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
 Thumbs.db
 desktop.ini
 

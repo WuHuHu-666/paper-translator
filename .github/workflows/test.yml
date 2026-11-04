@@ -2,12 +2,15 @@ name: 测试
 
 # 每次推送与 PR 都自动跑测试。依赖仓库外文件（真实论文、版面模型）的用例
 # 由 conftest.py 自动 skip，故在 GitHub 干净环境也是绿的。
+#
+# dev 也在监听范围内：dev 是实际开发分支，若只在 main 上跑，等于"改了没回归"。
+# fork 出来的仓库记得去 Settings → Actions 手动启用本 workflow（fork 默认不跑）。
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths: ["程序/**", ".github/workflows/test.yml"]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch: {}
 
 jobs:
@@ -29,6 +32,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-ci.txt
+
+      # 规则集与"为什么只开这几条"见 程序/pyproject.toml。
+      # 锁定次版本：ruff 升级会新增/调整规则，未锁定时 CI 可能因新版规则变红，
+      # 而那时人往往正忙别的事。要升就显式改这行（Dependabot 不盯 pip 生态）。
+      - name: 代码检查（ruff）
+        run: |
+          pip install "ruff>=0.17,<0.18"
+          ruff check .
 
       - name: 运行测试
         env:
