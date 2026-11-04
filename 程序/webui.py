@@ -29,8 +29,13 @@ from src.paths import resource  # noqa: E402
 WEB = resource("web")           # 打包后指向解包目录内的前端资源
 
 from src.config import load_config, save_config  # noqa: E402
-from src.pipeline import (SUPPORTED_EXTS, CancelledError,  # noqa: E402
-                          check_connection, output_suffix, translate_document)
+from src.pipeline import (  # noqa: E402
+    SUPPORTED_EXTS,
+    CancelledError,
+    check_connection,
+    output_suffix,
+    translate_document,
+)
 
 JOBS: dict = {}
 JOBS_LOCK = threading.Lock()
