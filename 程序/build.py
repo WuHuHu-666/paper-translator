@@ -61,8 +61,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from src.version import (APP_NAME, APP_NAME_EN, COPYRIGHT,  # noqa: E402
-                         HOMEPAGE, PUBLISHER, __version__)
+from src.version import (  # noqa: E402
+    APP_NAME,
+    APP_NAME_EN,
+    COPYRIGHT,
+    HOMEPAGE,
+    PUBLISHER,
+    __version__,
+)
 
 # zip 文件名必须纯 ASCII：GitHub Releases 上传时会把非 ASCII 字符剥掉，
 # "论文翻译工具-v1.2.0-full.zip" 到了发布页会剩下 "-v1.2.0-full.zip"，
@@ -107,7 +113,7 @@ OCR_MODULES = ["rapidocr_onnxruntime", "onnxruntime", "cv2"]
 # 是被版面模型那条路径捎带进去的），而招牌功能"扫描版 OCR"其实用不了。
 OCR_COLLECT = ["rapidocr_onnxruntime"]
 HIDDEN_IMPORTS = [
-    "pdfplumber", "reportlab", "pypdf", "requests", "fitz", "docx",
+    "pdfplumber", "reportlab", "pypdf", "requests", "pymupdf", "docx",
     "webview", "tkinter", "tkinter.filedialog",
 ]
 
@@ -179,7 +185,7 @@ def make_icon(out: Path) -> Path | None:
     try:
         import urllib.parse
 
-        import fitz
+        import pymupdf as fitz
         from PIL import Image
         css = (ROOT / "web" / "themes" / "sponge" / "theme.css").read_text(
             encoding="utf-8")
@@ -208,7 +214,7 @@ def make_icns(out: Path) -> "Path | None":
     try:
         import urllib.parse
 
-        import fitz
+        import pymupdf as fitz
         from PIL import Image
         css = (ROOT / "web" / "themes" / "sponge" / "theme.css").read_text(
             encoding="utf-8")

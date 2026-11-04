@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from src import paths
-from src.paths import OutputError, _adopt_legacy_dir, atomic_output, sweep_temp
+from src.paths import _adopt_legacy_dir, atomic_output, sweep_temp
 
 
 def test_atomic_output_success_replaces_and_leaves_no_part(tmp_path):

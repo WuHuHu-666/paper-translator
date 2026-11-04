@@ -11,11 +11,10 @@
 """
 import pytest
 
-fitz = pytest.importorskip("fitz")
+fitz = pytest.importorskip("pymupdf")
 
-from src.pdf_parser import Block, PageLayout          # noqa: E402
+from src.pdf_parser import Block, PageLayout  # noqa: E402
 from src.pdf_writer_fitz import _cite_rects, build_output  # noqa: E402
-
 
 # --- 引用编号定位（纯函数）----------------------------------------------------
 

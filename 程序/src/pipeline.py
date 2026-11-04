@@ -9,7 +9,12 @@ from .glossary import Glossary
 from .pdf_parser import parse_pdf
 from .pdf_writer import build_output
 from .textfix import pangu
-from .translator import BaseTranslator, DeepSeekTranslator, MockTranslator, TranslatorError
+from .translator import (
+    BaseTranslator,
+    DeepSeekTranslator,
+    MockTranslator,
+    TranslatorError,
+)
 
 
 def pick_backend(cfg: Config) -> str:

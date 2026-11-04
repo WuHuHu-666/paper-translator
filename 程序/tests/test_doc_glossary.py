@@ -7,13 +7,11 @@ terminology consistency 单列为指标（4.47 对 PDFMathTranslate 的 3.34）�
 """
 import re
 
-import pytest
-
 from src.config import load_config
 from src.glossary import Glossary, auto_extract_terms
 from src.pipeline import build_doc_glossary
-from src.translator import DeepSeekTranslator
 from src.transcache import TransCache
+from src.translator import DeepSeekTranslator
 
 PARA = ("Productive failure (PF) encourages learners to attempt problems before "
         "instruction. In our study, the productive failure condition consistently "

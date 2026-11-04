@@ -9,8 +9,7 @@ import pytest
 
 from src.config import load_config
 from src.pipeline import translate_document
-from src.text_translator import (_parse_markdown, _parse_srt, _parse_txt,
-                                 _protect)
+from src.text_translator import _parse_markdown, _parse_srt, _parse_txt, _protect
 
 MD = """---
 title: Sample Paper
@@ -116,7 +115,7 @@ def test_link_brackets_both_sides_protected(text):
 
 def test_link_survives_translation_dropping_brackets(tmp_path):
     """模型只译显示文字、占位符原样返回时，链接必须完整重建。"""
-    from src.text_translator import Seg, _mk_text_seg
+    from src.text_translator import _mk_text_seg
     seg = _mk_text_seg("see [the dataset](https://example.com/data) now")
     assert seg.kind == "text"
     # 模拟译文：显示文字换成中文，占位符保留

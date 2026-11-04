@@ -1,8 +1,14 @@
 """管线纯函数：跨栏配对（T12）、译文拆回、CJK 判定、全文语境、服务名推断。"""
 import pytest
 
-from src.pipeline import (_continues, _doc_context, _has_cjk,
-                          _split_translation, _unit_text, service_label)
+from src.pipeline import (
+    _continues,
+    _doc_context,
+    _has_cjk,
+    _split_translation,
+    _unit_text,
+    service_label,
+)
 
 
 # ---- service_label：错误提示要点名具体服务 ----

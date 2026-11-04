@@ -7,11 +7,16 @@ BIoU 会被幽灵文字彻底带偏（实测公式最多的那页从 0.44 掉到
 import pytest
 
 from src.config import load_config
-from src.metrics import (MATCH_THRESHOLD, biou_from_boxes, evaluate,
-                         page_boxes, untranslated_blocks)
+from src.metrics import (
+    MATCH_THRESHOLD,
+    biou_from_boxes,
+    evaluate,
+    page_boxes,
+    untranslated_blocks,
+)
 from src.pipeline import translate_pdf
 
-fitz = pytest.importorskip("fitz")
+fitz = pytest.importorskip("pymupdf")
 
 
 # ---------------- BIoU 纯函数 ----------------

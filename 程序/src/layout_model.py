@@ -54,7 +54,7 @@ def available(explicit: str = "") -> bool:
         return False
     try:
         import onnxruntime  # noqa: F401
-        import fitz  # noqa: F401
+        import pymupdf as fitz  # noqa: F401
         return True
     except Exception:  # noqa: BLE001
         return False
@@ -75,7 +75,7 @@ class LayoutModel:
             self._sess = ort.InferenceSession(
                 str(self._path), providers=["CPUExecutionProvider"])
         if self._doc is None:
-            import fitz
+            import pymupdf as fitz
             self._doc = fitz.open(pdf_path)
 
     def close(self):
@@ -96,8 +96,8 @@ class LayoutModel:
             return []
 
     def _detect(self, pdf_path: str, page_index: int) -> List[Tuple[str, Rect]]:
-        import fitz
         import numpy as np
+        import pymupdf as fitz
 
         self._ensure(pdf_path)
         page = self._doc[page_index]

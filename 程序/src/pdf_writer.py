@@ -22,8 +22,12 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas
 
-from .layout import (collect_avoid_rects, compute_target_box, layout_block,
-                     ocr_line_shape_avoids)
+from .layout import (
+    collect_avoid_rects,
+    compute_target_box,
+    layout_block,
+    ocr_line_shape_avoids,
+)
 from .pdf_parser import Block, PageLayout
 
 FONT = "STSong-Light"  # reportlab 内置简体中文字体

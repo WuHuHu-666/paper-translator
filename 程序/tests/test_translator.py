@@ -167,8 +167,8 @@ def test_cancel_midway_leaves_rest_untranslated(gloss):
             return super()._translate_batch(batch, gb)
 
     t = Flip(batch_size=1, max_workers=1)
-    out = t.translate_texts([f"p{i}" for i in range(20)], gloss,
-                            should_cancel=lambda: flip["on"])
+    t.translate_texts([f"p{i}" for i in range(20)], gloss,
+                      should_cancel=lambda: flip["on"])
     assert t.calls < 20, "取消后不应把 20 批全部翻完"
 
 
@@ -246,6 +246,7 @@ def test_auth_error_is_not_retried(monkeypatch):
 def test_no_pointless_sleep_after_final_attempt(monkeypatch):
     """最后一次尝试失败后直接抛错，不再空等一轮退避。"""
     import requests
+
     from src.translator import DeepSeekTranslator, TranslatorError
     slept = []
 
@@ -324,6 +325,7 @@ def test_null_content_is_a_clear_error(monkeypatch):
 
 def test_429_honors_retry_after(monkeypatch):
     import requests  # noqa: F401
+
     from src.translator import DeepSeekTranslator
     slept, calls = [], []
 

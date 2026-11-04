@@ -164,8 +164,14 @@ def translate_docx(
     from docx import Document
 
     from .glossary import Glossary
-    from .pipeline import (CancelledError, _estimate_line, _maybe_pangu,
-                           _translated, build_doc_glossary, make_translator)
+    from .pipeline import (
+        CancelledError,
+        _estimate_line,
+        _maybe_pangu,
+        _translated,
+        build_doc_glossary,
+        make_translator,
+    )
 
     def report(msg: str, frac: float):
         if progress:

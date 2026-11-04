@@ -1,5 +1,4 @@
 """真实论文解析的结构性回归（改内核后最容易被打破的一批不变量）。"""
-import pytest
 
 
 def _translatable(layouts):

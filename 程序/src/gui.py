@@ -20,16 +20,14 @@ from __future__ import annotations
 import os
 import queue
 import threading
+import tkinter as tk
 import traceback
 from pathlib import Path
-
-import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from .config import load_config, save_config
-from .pipeline import (translate_pdf, check_connection, CancelledError,
-                       output_suffix)
+from .pipeline import CancelledError, check_connection, output_suffix, translate_pdf
 from .translator import TranslatorError
 
 MODELS = ["deepseek-v4-pro", "deepseek-v4-flash"]

@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import fitz
+import pymupdf as fitz
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SRC = ROOT.parent / ("Observing a robot peer's failures facilitates "

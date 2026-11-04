@@ -50,7 +50,7 @@ def main() -> int:
 
     has_fitz = True
     try:
-        import fitz  # noqa: F401
+        import pymupdf as fitz  # noqa: F401
         ver = getattr(fitz, "__version__", None) or \
             getattr(fitz, "VersionBind", "?")
         say(f"[✓] pymupdf 已安装（{ver}）→ 将测试「PyMuPDF 精确抹除」后端")

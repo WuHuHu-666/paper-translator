@@ -105,8 +105,14 @@ def translate_pptx(
     from pptx import Presentation
 
     from .glossary import Glossary
-    from .pipeline import (CancelledError, _estimate_line, _maybe_pangu,
-                           _translated, build_doc_glossary, make_translator)
+    from .pipeline import (
+        CancelledError,
+        _estimate_line,
+        _maybe_pangu,
+        _translated,
+        build_doc_glossary,
+        make_translator,
+    )
 
     def report(msg: str, frac: float):
         if progress:

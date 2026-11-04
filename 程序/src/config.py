@@ -10,9 +10,8 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
 
 from .paths import data_file, resource_dir, user_path
 

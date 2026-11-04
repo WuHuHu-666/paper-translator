@@ -21,8 +21,12 @@ import re
 from pathlib import Path
 from typing import Callable, List, NamedTuple, Optional, Sequence
 
-from .layout import (collect_avoid_rects, compute_target_box, layout_block,
-                     ocr_line_shape_avoids)
+from .layout import (
+    collect_avoid_rects,
+    compute_target_box,
+    layout_block,
+    ocr_line_shape_avoids,
+)
 from .pdf_parser import PageLayout, Rect
 
 _ASCENT = 0.85     # 基线相对字号的近似上高（与兜底后端一致）
@@ -72,7 +76,7 @@ class BackendUnsupported(Exception):
 
 def available() -> bool:
     try:
-        import fitz  # noqa: F401
+        import pymupdf as fitz  # noqa: F401
         return True
     except Exception:  # noqa: BLE001
         return False
@@ -154,7 +158,7 @@ def find_font_pair(explicit: str = "") -> FontSet:
 def _make_measure(fontfile: Optional[str]) -> Callable[[str, float], float]:
     """测宽函数。**必须与绘制用的字体完全一致**，否则排版预留与实际绘制对不上，
     轻则压字、重则整块溢出。"""
-    import fitz
+    import pymupdf as fitz
     try:
         if fontfile:
             # 外置的思源/Noto 是泛 CJK 字体，**自带比例西文字形**，中西文同一
@@ -243,7 +247,7 @@ def _snapshot_links(page) -> tuple:
 
     返回 (原始链接列表, {引用号: 链接字典})。
     """
-    import fitz
+    import pymupdf as fitz
     links = page.get_links()
     cand = [lk for lk in links
             if lk.get("kind") in (fitz.LINK_GOTO, fitz.LINK_NAMED)
@@ -295,7 +299,7 @@ def _cite_rects(text: str, x: float, y_top: float, h: float, size: float,
 
 def _relink(page, links, cites, blocks, new_cites) -> None:
     """恢复链接：没动过的原样放回，重排过的按译文新位置重新锚定。"""
-    import fitz
+    import pymupdf as fitz
     erased = [fitz.Rect(r) for b in blocks for r in b.line_rects]
     alive = {(round(fitz.Rect(l["from"]).x0, 1), round(fitz.Rect(l["from"]).y0, 1))
              for l in page.get_links()}
@@ -357,7 +361,7 @@ def _shifted_link(lk: dict, dx: float, dy: float, page_of) -> Optional[dict]:
     目标落在拼版的**同一侧**，本模块正是这么搬的：原文页上的链接跳原文侧，
     译文页上的链接跳译文侧。
     """
-    import fitz
+    import pymupdf as fitz
     out = dict(lk)
     r = fitz.Rect(lk["from"])
     out["from"] = fitz.Rect(r.x0 + dx, r.y0 + dy, r.x1 + dx, r.y1 + dy)
@@ -447,7 +451,7 @@ class _FormulaSource:
     """
 
     def __init__(self, src_doc, rects_by_page: dict):
-        import fitz
+        import pymupdf as fitz
         self._doc = fitz.open()
         self._map: dict = {}
         for pno in sorted(rects_by_page):
@@ -475,7 +479,7 @@ class _FormulaSource:
         往左上探出一点（fitz 的词框比 pdfplumber 的高，会探到上一行去），被
         上一行的抹除框蹭到，于是渲染出来 `F` 和 `=` 消失、只剩下标 `4,314`。
         """
-        import fitz
+        import pymupdf as fitz
         pad = _CLIP_PAD + 0.5          # 比取景裁剪略宽，覆盖住可见范围
         keep = [fitz.Rect(r[0] - pad, r[1] - pad, r[2] + pad, r[3] + pad)
                 for r in rects]
@@ -570,7 +574,7 @@ def _remap_toc(out_doc, src_doc, page_of) -> None:
 
 
 def _redact_page(page, blocks) -> None:
-    import fitz
+    import pymupdf as fitz
     added = 0
     for b in blocks:
         if getattr(b, "from_ocr", False):
@@ -603,7 +607,7 @@ def _draw_page(page, layout: PageLayout, blocks, src_doc,
                fonts: "FontSet",
                measures: dict, forced_sizes: Optional[dict] = None,
                fsrc: "Optional[_FormulaSource]" = None) -> None:
-    import fitz
+    import pymupdf as fitz
     # 公式取景源（只剩公式的副本页），没有就退回原始副本。见 _FormulaSource
     fdoc, fpno = (fsrc.page_for(src_doc, layout.page_index)
                   if fsrc is not None else (src_doc, layout.page_index))
@@ -692,7 +696,7 @@ def _draw_page(page, layout: PageLayout, blocks, src_doc,
 def build_output(input_path: str, output_path: str,
                  layouts: List[PageLayout], mode: str = "translated",
                  font_path: str = "") -> None:
-    import fitz
+    import pymupdf as fitz
 
     doc = fitz.open(input_path)   # 工作文档：redact + 写中文
     src = fitz.open(input_path)   # 原始副本：公式矢量回贴来源

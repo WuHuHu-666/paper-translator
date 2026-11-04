@@ -13,7 +13,7 @@ wheel 里——安装完成后**离线可用**，符合"非程序员双击即用
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 
 _DPI = 200          # OCR 渲染分辨率：200dpi 在速度与小字识别率间平衡
 _MIN_SCORE = 0.5    # 低于该置信度的识别行丢弃
@@ -22,8 +22,8 @@ _MIN_SCORE = 0.5    # 低于该置信度的识别行丢弃
 def available() -> bool:
     """rapidocr 与 pymupdf（渲染位图用）都可导入才认为 OCR 可用。"""
     try:
+        import pymupdf as fitz  # noqa: F401
         import rapidocr_onnxruntime  # noqa: F401
-        import fitz  # noqa: F401
         return True
     except Exception:  # noqa: BLE001
         return False
@@ -49,7 +49,7 @@ class OcrEngine:
                                  det_limit_type="max",
                                  use_cls=False)
         if self._doc is None:
-            import fitz
+            import pymupdf as fitz
             self._doc = fitz.open(self.pdf_path)
 
     def close(self):
@@ -69,8 +69,8 @@ class OcrEngine:
 
     def _words_for_page(self, page_index: int) -> List[dict]:
         self._ensure()
-        import fitz
         import numpy as np
+        import pymupdf as fitz
 
         page = self._doc[page_index]
         scale = _DPI / 72.0
