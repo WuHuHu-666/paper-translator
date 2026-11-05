@@ -15,7 +15,11 @@
     <h1>文档翻译</h1>
     <p class="tagline">PDF · Word · PPT 等文档 · 保留排版公式图片 · 参考文献不乱动</p>
   </div>
-  <div class="theme-switch" id="theme-switch" title="换皮肤"></div>
+  <div class="header-actions">
+    <button class="btn btn-sm adv-open" id="btn-advanced"
+            title="高级设置：API Key、接口地址、自定义服务商">⚙ 高级设置</button>
+    <div class="theme-switch" id="theme-switch" title="换皮肤"></div>
+  </div>
 </header>
 
 <!-- 宽屏左右两栏：左列=操作流（选文件→开始），右列=设置面板；
@@ -45,7 +49,7 @@
           <p>中文好、最便宜，一篇 15 页论文通常几毛钱。</p>
           <a href="https://platform.deepseek.com/api_keys" target="_blank"
              rel="noopener">→ 去申请 Key（sk- 开头）</a>
-          <p class="muted">申请后需充少量金额（如 10 元）。把 Key 填到「高级选项 → API Key」即可。</p>
+          <p class="muted">申请后需充少量金额（如 10 元）。点右上角「⚙ 高级设置」填进去即可。</p>
         </div>
         <div class="guide-opt">
           <b>② 完全免费 · 离线</b>
@@ -131,16 +135,54 @@
             <button class="btn btn-sm" id="btn-outdir">浏览…</button>
           </span>
         </label>
+
+        <!-- 以下原本收在「高级选项」折叠区里：日常要调的项不该藏起来，
+             常驻显示在输出目录之后；只有 API Key / 接口地址 / 自定义服务商
+             进了右上角的弹窗。 -->
+        <label class="wide">术语库 CSV
+          <span class="key-row">
+            <input id="s-glossary" placeholder="glossary/cs_terms.csv">
+            <button class="btn btn-sm" id="btn-glossary">浏览…</button>
+          </span>
+        </label>
+        <label>并发数
+          <input type="number" id="s-workers" min="1" max="32" value="8">
+        </label>
+        <label>回填后端
+          <select id="s-backend">
+            <option value="auto">自动（推荐）</option>
+            <option value="pymupdf">PyMuPDF·精确抹除</option>
+            <option value="reportlab">reportlab·兼容覆盖</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="s-thinking"> 思考模式（更准更慢）</label>
+        <label class="check"><input type="checkbox" id="s-direct"> 直连（SSL 报错时勾选）</label>
+        <label class="check"><input type="checkbox" id="s-mock"> 离线测试（不花钱看排版）</label>
+        <label class="check"><input type="checkbox" id="s-refresh"> 忽略缓存重新翻译</label>
+        <label class="check wide"><input type="checkbox" id="s-auto-glossary" checked> 本文术语表（抽取全文高频术语，全篇统一译名）</label>
       </div>
-      <details id="adv">
-        <summary>高级选项</summary>
+    </section>
+
+  </div>
+
+</main>
+
+<!-- 高级设置弹窗：右上角「⚙ 高级设置」打开。
+     连接（API Key / 接口地址）+ 自定义服务商配置都放这里。 -->
+<div class="modal" id="adv-modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="adv-title">
+    <header class="modal-head">
+      <b id="adv-title">高级设置</b>
+      <button class="modal-x" id="adv-close" title="关闭" aria-label="关闭">✕</button>
+    </header>
+    <div class="modal-body">
+
+      <!-- 当前服务是 DeepSeek 等预设时才有这一块（填 Key / 改地址 + 测试连接）；
+           正在编辑某个自定义服务商时整块隐藏 —— 下面表单里已有自己的地址和密钥。 -->
+      <section class="adv-sec" id="adv-conn">
+        <h3 id="conn-title">连接</h3>
         <div class="grid">
-          <label class="wide">术语库 CSV
-            <span class="key-row">
-              <input id="s-glossary" placeholder="glossary/cs_terms.csv">
-              <button class="btn btn-sm" id="btn-glossary">浏览…</button>
-            </span>
-          </label>
           <label class="wide">API Key
             <span class="key-row">
               <input type="password" id="s-key" placeholder="sk-…（DeepSeek 官网申请）">
@@ -151,78 +193,67 @@
             </span>
           </label>
           <label class="wide">接口地址
-            <input id="s-baseurl">
+            <input id="s-baseurl" placeholder="https://api.deepseek.com">
           </label>
-          <label>并发数
-            <input type="number" id="s-workers" min="1" max="32" value="8">
+        </div>
+        <p class="hint">这里填的是当前预设服务（DeepSeek 等）的 Key。自建服务用自己的地址和密钥，
+          在下面「自定义服务商」里填。</p>
+      </section>
+
+      <section class="adv-sec cp" id="cp-editor">
+        <header class="cp-head">
+          <b id="cp-title">自定义服务商</b>
+          <button class="btn btn-sm cp-del" id="cp-delete" hidden>删除此配置</button>
+        </header>
+        <div class="grid">
+          <label>服务商名称
+            <input id="cp-name" placeholder="如 strata（会出现在「服务」下拉里）">
           </label>
-          <label>回填后端
-            <select id="s-backend">
-              <option value="auto">自动（推荐）</option>
-              <option value="pymupdf">PyMuPDF·精确抹除</option>
-              <option value="reportlab">reportlab·兼容覆盖</option>
+          <label>API 协议
+            <select id="cp-protocol">
+              <option value="openai" title="OpenAI 兼容：POST {base}/chat/completions">OpenAI 兼容 · Chat</option>
             </select>
           </label>
-          <label class="check"><input type="checkbox" id="s-thinking"> 思考模式（更准更慢）</label>
-          <label class="check"><input type="checkbox" id="s-direct"> 直连（SSL 报错时勾选）</label>
-          <label class="check"><input type="checkbox" id="s-mock"> 离线测试（不花钱看排版）</label>
-          <label class="check"><input type="checkbox" id="s-refresh"> 忽略缓存重新翻译（上次结果不对时勾选）</label>
-          <label class="check"><input type="checkbox" id="s-auto-glossary" checked> 本文术语表（抽取全文高频术语，全篇统一译名）</label>
-        </div>
-
-        <!-- 自定义供应商编辑面板：选「＋ 增加自定义配置」或已保存的自定义供应商时显示。
-             模型目录由 components.js 渲染（可增删模型/档位/参数）。 -->
-        <section class="cp" id="cp-editor" hidden>
-          <header class="cp-head">
-            <b id="cp-title">新自定义配置</b>
-            <button class="btn btn-sm cp-del" id="cp-delete" hidden>删除</button>
-          </header>
-
-          <label class="wide">API 密钥
+          <label class="wide">API 地址
+            <input id="cp-base" placeholder="http://192.168.10.201:8080/v1">
+          </label>
+          <label class="wide">API 密钥 <small>(留空则沿用上面的 API Key)</small>
             <span class="key-row">
-              <input type="password" id="cp-key" placeholder="留空则沿用上方 API Key">
+              <input type="password" id="cp-key" placeholder="sk-…">
               <button class="btn btn-sm" id="cp-eye" title="显示/隐藏">👁</button>
             </span>
           </label>
-
-          <details class="cp-sec" open>
-            <summary>自定义设置</summary>
-            <div class="grid">
-              <label>显示名称
-                <input id="cp-name" placeholder="如 strata（显示在供应商下拉里）">
-              </label>
-              <label>API 协议
-                <select id="cp-protocol">
-                  <option value="openai" title="OpenAI 兼容：POST {base}/chat/completions">OpenAI 兼容 · Chat</option>
-                </select>
-              </label>
-              <label class="wide">API 地址
-                <input id="cp-base" placeholder="http://192.168.10.201:8080/v1">
-              </label>
-            </div>
-          </details>
-
-          <div class="cp-bar">
-            <b>模型目录</b>
-            <span class="cp-bar-actions">
+          <label class="wide">模型 <small>(可从候选里选，也可直接输入)</small>
+            <span class="key-row">
+              <span class="combo">
+                <input id="cp-model" autocomplete="off"
+                       placeholder="点右侧「获取可用模型」自动拉取，或直接输入模型 ID">
+                <button class="combo-toggle" id="cp-model-btn" type="button"
+                        title="展开候选模型" aria-label="展开候选模型">▾</button>
+                <div class="combo-menu" id="cp-model-menu" hidden></div>
+              </span>
               <button class="btn btn-sm" id="cp-fetch">获取可用模型</button>
             </span>
-          </div>
-          <datalist id="cp-model-ids"></datalist>
+          </label>
+        </div>
+
+        <details class="cp-sec" id="cp-detail-sec">
+          <summary>该模型的参数（上下文窗口 / 推理档位 / 附带参数）</summary>
           <div id="cp-models"></div>
-          <button class="btn btn-sm cp-add" id="cp-add-model">＋ 添加模型</button>
+        </details>
 
-          <footer class="cp-foot">
-            <button class="btn" id="cp-cancel">取消</button>
-            <button class="btn btn-primary" id="cp-save">保存</button>
-          </footer>
-        </section>
-      </details>
-    </section>
+        <footer class="cp-foot">
+          <button class="btn" id="cp-test"
+                  title="用上面填的 API 地址和密钥连一次">测试连接</button>
+          <span class="cp-spacer"></span>
+          <button class="btn" id="cp-cancel">取消</button>
+          <button class="btn btn-primary" id="cp-save">保存服务商配置</button>
+        </footer>
+      </section>
 
+    </div>
   </div>
-
-</main>
+</div>
 
 <footer class="app-footer">本地运行 · 数据不出电脑（除发送给所选翻译服务的文字）</footer>
 <div class="toast" id="toast"></div>

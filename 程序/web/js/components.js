@@ -82,10 +82,14 @@ const NEW_PROVIDER = "__new__";     // 供应商下拉里的「＋ 增加自定�
 let customProviders = [];
 // 当前选中的自定义供应商 id；选预设时为空串
 let curProviderId = "";
-// 编辑器里的草稿（保存前的副本，取消即丢弃）
+// 编辑器里的草稿（深拷贝自已保存配置，保存前的修改不影响内存里那份）
 let editing = null;
 let editingNew = false;
-// 打开编辑器前的供应商选择，取消时回退到这里
+// 弹窗里正在编辑的模型 ID（可输入下拉的当前值）
+let curModelId = "";
+// 「获取可用模型」最近一次从上游拉到的 ID 列表，只用于填下拉候选
+let fetchedModels = [];
+// 打开编辑器前的服务商选择，取消时回退到这里
 let lastSel = "p0";
 
 /* 本机服务（Ollama 等）不需要 Key——与后端 pipeline._is_local_url 同口径。 */
@@ -178,10 +182,10 @@ export function initSettings() {
 
   svc.addEventListener("change", () => {
     // 「＋ 增加自定义配置」不是真选项：开了新草稿就把下拉退回原选择，
-    // 等保存成功后由 applyProvider 重新指向新的供应商。
+    // 等保存成功后由 applyProvider 重新指向新的服务商。
     if (svc.value === NEW_PROVIDER) {
       svc.value = lastSel;
-      return openEditor(newProviderDraft(), true);
+      return openAdvanced(true);
     }
     applyProvider(svc.value);
   });
@@ -217,7 +221,7 @@ export function initSettings() {
   });
 
   initGuide();
-  initProviderEditor();
+  initAdvanced();
 
   // 语言表（后端单一真源）+ 配置，并行取
   return Promise.all([api.languages(), api.config()]).then(([langs, cfg]) => {
@@ -233,8 +237,6 @@ export function initSettings() {
 
     $("s-key").value = cfg.api_key || "";
     $("s-remember").checked = !!cfg.api_key;
-    // API Key 与术语库都在「高级选项」里：还没配 Key 时先展开，否则用户找不到输入框
-    if (!cfg.api_key) $("adv").open = true;
     // 首次引导：未配置 Key 且用户没手动关掉过，才显示
     const dismissed = localStorage.getItem("guide-dismissed") === "1";
     if (!cfg.api_key && !isLocalBase(cfg.base_url || "") && !dismissed)
@@ -282,6 +284,9 @@ function fillModels(models, current) {
   sel.value = current && opts.includes(current) ? current : opts[0] || "";
 }
 
+/* 把某个服务商应用到「设置」里。注意：这里**不碰弹窗** ——
+   弹窗只在用户点右上角按钮（或选「＋ 增加自定义配置」）时打开，
+   否则每次加载页面都会被弹窗盖住。 */
 function applyProvider(value, model) {
   const sel = $("s-service");
   if (!value) value = "p0";
@@ -294,7 +299,6 @@ function applyProvider(value, model) {
     curProviderId = "";
     $("s-baseurl").value = s.base;
     fillModels(s.models, model);
-    hideEditor();
   } else if (value.startsWith("c")) {
     const p = customProviders.find((x) => "c" + x.id === value);
     if (!p) return;
@@ -302,8 +306,6 @@ function applyProvider(value, model) {
     $("s-baseurl").value = p.base_url || "";
     if (p.api_key) $("s-key").value = p.api_key;
     fillModels((p.models || []).map((m) => m.id), model);
-    // 已保存的自定义供应商：直接展开它的面板，改两下就能保存
-    showEditor(p, false);
   }
   renderReco();
 }
@@ -321,7 +323,19 @@ function pickInitialProvider(cfg) {
   return customProviders.length ? "c" + customProviders[0].id : "p0";
 }
 
-/* ---------------- 自定义供应商编辑面板 ---------------- */
+/* ---------------- 高级设置弹窗（连接 + 自定义服务商） ---------------- */
+
+function openModal() {
+  $("adv-modal").hidden = false;
+  document.body.classList.add("modal-open");
+  $("adv-close").focus();
+}
+
+function closeModal() {
+  $("adv-modal").hidden = true;
+  document.body.classList.remove("modal-open");
+  hideEditor();
+}
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -358,6 +372,32 @@ function checkLabel(text, checked, onChange) {
   return lb;
 }
 
+/* 推理档位是固定阶梯：默认给到 high，之后每点一次「添加档位」往上加一级，
+   到 max 就封顶（和 DeepSeek harness 的下拉一致，不用手打档位名）。 */
+const TIER_LEVELS = ["off", "low", "medium", "high", "xhigh", "max"];
+const TIER_DEFAULT_COUNT = 4;   // off / low / medium / high
+
+function tierValueOf(level) { return level === "off" ? "none" : level; }
+
+function defaultTiers() {
+  return TIER_LEVELS.slice(0, TIER_DEFAULT_COUNT)
+    .map((lv) => ({ level: lv, value: tierValueOf(lv) }));
+}
+
+/* 已有的最大档再往上一级；已经到 max（或上面的都用过了）就返回 "" */
+function nextTierLevel(tiers) {
+  const used = new Set((tiers || []).map((t) => t.level));
+  let maxIdx = -1;
+  for (const t of tiers || []) {
+    const i = TIER_LEVELS.indexOf(t.level);
+    if (i > maxIdx) maxIdx = i;
+  }
+  for (let i = maxIdx + 1; i < TIER_LEVELS.length; i += 1) {
+    if (!used.has(TIER_LEVELS[i])) return TIER_LEVELS[i];
+  }
+  return "";
+}
+
 function newModelDraft(id = "") {
   return {
     id,
@@ -369,7 +409,7 @@ function newModelDraft(id = "") {
       enabled: false,
       key: "reasoning_effort",
       active: "",
-      tiers: [{ level: "off", value: "none" }, { level: "low", value: "low" }],
+      tiers: defaultTiers(),
     },
     // 其他附带参数（top_p / seed …），直接平铺进请求体
     params: [],
@@ -378,59 +418,122 @@ function newModelDraft(id = "") {
 
 function newProviderDraft() {
   return { id: "", name: "", base_url: "", protocol: "openai", api_key: "",
-           models: [newModelDraft()] };
+           models: [] };
 }
 
+/* ---- 打开入口：右上角按钮 / 服务下拉里的「＋ 增加自定义配置」 ---- */
+function openAdvanced(isNew) {
+  // 顶部「连接」块只在当前选的是预设服务（DeepSeek / Ollama …）时出现；
+  // 正在编辑自定义服务商时它和下面的「API 地址 + API 密钥」完全重复，整块收起。
+  const editingSaved = !isNew && !!curProviderId;
+  if (isNew || !curProviderId) {
+    showEditor(newProviderDraft(), true);
+  } else {
+    const p = customProviders.find((x) => x.id === curProviderId);
+    // 深拷贝：编辑途中点「取消」不能把内存里那份已保存的配置也改了
+    showEditor(p ? JSON.parse(JSON.stringify(p)) : newProviderDraft(), !p);
+  }
+  $("adv-conn").hidden = editingSaved;
+  const preset = editingSaved ? null : PRESETS[+((lastSel || "p0").slice(1))];
+  $("conn-title").textContent = preset ? `连接 · ${preset.name}` : "连接";
+  openModal();
+}
+
+/* ---- 编辑态 ---- */
 function showEditor(p, isNew) {
   editing = p;
   editingNew = !!isNew;
-  $("cp-title").textContent = isNew ? "新自定义配置" : (p.name || "未命名配置");
+  $("cp-title").textContent = isNew ? "新建自定义服务商" : (p.name || "未命名服务商");
   $("cp-delete").hidden = !!isNew;
   $("cp-name").value = p.name || "";
   $("cp-base").value = p.base_url || "";
   $("cp-protocol").value = p.protocol || "openai";
   $("cp-key").value = p.api_key || "";
-  $("cp-editor").hidden = false;
-  // 进了编辑态就把高级区展开并滚过去，用户不用自己找
-  $("adv").open = true;
-  renderModels();
+  curModelId = (p.models?.[0] || {}).id || "";
+  $("cp-model").value = curModelId;
+  renderDetail();
+  $("cp-detail-sec").open = !!curModelId;
+  hideModelMenu();
 }
 
 function hideEditor() {
   editing = null;
   editingNew = false;
-  $("cp-editor").hidden = true;
+  curModelId = "";
+  fetchedModels = [];
   $("cp-models").innerHTML = "";
+  hideModelMenu();
 }
 
-function renderModels() {
+/* ---- 模型：可输入的下拉（输入框 + ▾ 候选菜单） ---- */
+function modelOptions() {
+  const ids = [...fetchedModels, ...((editing && editing.models) || []).map((m) => m.id)];
+  return [...new Set(ids.filter(Boolean))];
+}
+
+function renderModelMenu() {
+  const menu = $("cp-model-menu");
+  const kw = $("cp-model").value.trim().toLowerCase();
+  const ids = modelOptions().filter((id) => !kw || id.toLowerCase().includes(kw));
+  menu.innerHTML = "";
+  if (!ids.length) {
+    menu.appendChild(el("p", "combo-empty",
+      fetchedModels.length ? "没有匹配的模型" : "还没有候选。点「获取可用模型」自动拉取"));
+  } else {
+    for (const id of ids) {
+      const b = el("button", "combo-item", id);
+      b.type = "button";
+      // mousedown 而不是 click：click 之前输入框会先失焦，菜单已经被关掉了
+      b.addEventListener("mousedown", (e) => { e.preventDefault(); pickModel(id); });
+      menu.appendChild(b);
+    }
+  }
+  menu.hidden = false;
+}
+
+function hideModelMenu() { $("cp-model-menu").hidden = true; }
+
+function pickModel(id) {
+  $("cp-model").value = id;
+  curModelId = id;
+  ensureModel(id);
+  $("cp-detail-sec").open = true;
+  renderDetail();
+  hideModelMenu();
+}
+
+/* 目录里没有就新建一条（用户直接手输模型 ID 时走这里） */
+function ensureModel(id) {
+  if (!editing || !id) return null;
+  editing.models = editing.models || [];
+  let m = editing.models.find((x) => (x.id || "") === id);
+  if (!m) { m = newModelDraft(id); editing.models.push(m); }
+  return m;
+}
+
+function renderDetail() {
   const box = $("cp-models");
   box.innerHTML = "";
-  if (!editing) return;
-  if (!editing.models) editing.models = [];
-  if (!editing.models.length) {
+  if (!editing || !curModelId) {
     box.appendChild(el("p", "cp-empty",
-      "还没有模型。点「获取可用模型」自动拉取，或手动「＋ 添加模型」。"));
+      "还没选模型。点「获取可用模型」自动拉取，或直接在「模型」里输入一个 ID。"));
     return;
   }
-  editing.models.forEach((m, i) => box.appendChild(modelCard(m, i)));
+  box.appendChild(modelCard(ensureModel(curModelId)));
 }
 
-function modelCard(m, idx) {
+/* 只渲染「当前选中的那个模型」的详情：模型多了也不再堆一屏卡片 */
+function modelCard(m) {
   const card = el("div", "cp-model");
 
-  // 模型 ID（可从「获取可用模型」的结果里直接选）+ 删除
   const head = el("div", "cp-row cp-row-2");
-  const idIn = el("input");
-  idIn.placeholder = "模型 ID（如 swift-1.5-iq3_xxs）";
-  idIn.value = m.id || "";
-  idIn.setAttribute("list", "cp-model-ids");
-  idIn.addEventListener("input", () => { m.id = idIn.value.trim(); });
-  head.append(idIn, iconBtn("🗑", "删除此模型", () => {
-    editing.models.splice(idx, 1);
-    renderModels();
-  }));
-
+  head.append(el("b", "cp-cur", "当前模型：" + (m.id || "（未命名）")),
+              iconBtn("🗑", "从目录里删除此模型", () => {
+                editing.models = (editing.models || []).filter((x) => x !== m);
+                curModelId = "";
+                $("cp-model").value = "";
+                renderDetail();
+              }));
   // 上下文窗口 / 最大输出：只作记录（有些服务按它截断，方便自己核对）
   const dims = el("div", "grid");
   dims.append(
@@ -462,7 +565,7 @@ function modelCard(m, idx) {
                     el("small", "cp-hint",
                        `开启后按选中档位发送 ${m.reasoning.key || "reasoning_effort"}`));
 
-  // 档位表：档位名 / 发给 API 的值 / 当前生效 / 删除
+  // 档位表：当前生效 / 档位（下拉）/ 发给 API 的值 / 删除
   const tiers = el("div", "cp-table");
   const thead = el("div", "cp-row cp-row-tier cp-thead");
   thead.append(el("span"), el("span", "cp-th", "档位"),
@@ -472,17 +575,26 @@ function modelCard(m, idx) {
     const row = el("div", "cp-row cp-row-tier");
     const rb = document.createElement("input");
     rb.type = "radio";
-    rb.name = "cp-tier-" + idx;
+    rb.name = "cp-tier";
     rb.title = "当前生效档位";
     rb.checked = m.reasoning.active === t.level;
     rb.addEventListener("change", () => { m.reasoning.active = t.level; });
-    const lv = el("input");
-    lv.placeholder = "off / low / high";
-    lv.value = t.level == null ? "" : t.level;
-    lv.addEventListener("input", () => {
-      if (m.reasoning.active === t.level) m.reasoning.active = lv.value.trim();
-      t.level = lv.value.trim();
+
+    const lv = document.createElement("select");
+    // 老配置里手打过的档位名也列出来，不然一打开就显示成别的档
+    const opts = TIER_LEVELS.includes(t.level) || !t.level
+      ? TIER_LEVELS : [...TIER_LEVELS, t.level];
+    for (const o of opts) lv.add(new Option(o, o));
+    lv.value = t.level || TIER_LEVELS[0];
+    lv.addEventListener("change", () => {
+      const old = t.level;
+      // 参数值没动过就跟档位一起变；用户改过就保留（有的服务要传中文/数字）
+      if (!t.value || t.value === tierValueOf(old)) t.value = tierValueOf(lv.value);
+      if (m.reasoning.active === old) m.reasoning.active = lv.value;
+      t.level = lv.value;
+      renderDetail();
     });
+
     const vv = el("input");
     vv.placeholder = "发给 API 的值";
     vv.value = t.value == null ? "" : t.value;
@@ -490,16 +602,23 @@ function modelCard(m, idx) {
     row.append(rb, lv, vv, iconBtn("🗑", "删除此档位", () => {
       m.reasoning.tiers.splice(ti, 1);
       if (m.reasoning.active === t.level) m.reasoning.active = "";
-      renderModels();
+      renderDetail();
     }));
     tiers.appendChild(row);
   });
+  const nxt = nextTierLevel(m.reasoning.tiers);
   const addTier = el("button", "btn btn-sm cp-add", "＋ 添加档位");
   addTier.type = "button";
-  addTier.addEventListener("click", () => {
-    m.reasoning.tiers.push({ level: "", value: "" });
-    renderModels();
-  });
+  if (!nxt) {
+    addTier.disabled = true;
+    addTier.title = `已经到最高档 ${TIER_LEVELS[TIER_LEVELS.length - 1]} 了`;
+  } else {
+    addTier.title = `加一级 ${nxt}`;
+    addTier.addEventListener("click", () => {
+      m.reasoning.tiers.push({ level: nxt, value: tierValueOf(nxt) });
+      renderDetail();
+    });
+  }
   tiers.appendChild(addTier);
 
   // 其他附带参数
@@ -520,7 +639,7 @@ function modelCard(m, idx) {
     v.addEventListener("input", () => { it.value = v.value; });
     row.append(el("span"), k, v, iconBtn("🗑", "删除此参数", () => {
       m.params.splice(pi, 1);
-      renderModels();
+      renderDetail();
     }));
     params.appendChild(row);
   });
@@ -529,7 +648,7 @@ function modelCard(m, idx) {
   addParam.addEventListener("click", () => {
     m.params = m.params || [];
     m.params.push({ key: "", value: "" });
-    renderModels();
+    renderDetail();
   });
   params.appendChild(addParam);
 
@@ -539,10 +658,13 @@ function modelCard(m, idx) {
 
 function collectEditor() {
   editing.name = $("cp-name").value.trim();
-  editing.base_url = $("cp-base").value.trim();
+  editing.base_url = $("cp-base").value.trim().replace(/\/+$/, "");
   editing.protocol = $("cp-protocol").value;
   editing.api_key = $("cp-key").value.trim();
-  // 没填模型 ID 的空行丢掉，别把占位行存进配置
+  // 输入框里的 ID 可能还没落进目录（用户直接手输），补一次
+  const typed = $("cp-model").value.trim();
+  if (typed) ensureModel(typed);
+  // 空 ID 的占位行不写进配置
   editing.models = (editing.models || []).filter((m) => (m.id || "").trim());
   return editing;
 }
@@ -557,8 +679,9 @@ function persistProviders() {
 async function saveProvider() {
   if (!editing) return;
   const p = collectEditor();
-  if (!p.name) return toast("请先填写「显示名称」");
+  if (!p.name) return toast("请先填写「服务商名称」");
   if (!p.base_url) return toast("请先填写「API 地址」");
+  if (!p.models.length) return toast("请先选模型（可点「获取可用模型」）");
 
   if (editingNew) {
     p.id = "cp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -571,9 +694,11 @@ async function saveProvider() {
   curProviderId = p.id;
   const r = await persistProviders();
   if (r.ok === false) return toast("保存失败：" + (r.error || "未知错误"));
+
   fillProviders();
-  applyProvider("c" + p.id, (p.models[0] || {}).id);
-  toast(`已保存「${p.name}」，可在「服务」下拉里直接选`);
+  applyProvider("c" + p.id, p.models[0].id);
+  closeModal();
+  toast(`已保存「${p.name}」，并在设置里选中`);
 }
 
 async function deleteProvider() {
@@ -581,11 +706,11 @@ async function deleteProvider() {
   if (!confirm(`删除自定义配置「${editing.name}」？`)) return;
   customProviders = customProviders.filter((x) => x.id !== editing.id);
   curProviderId = "";
-  hideEditor();
   const r = await persistProviders();
   if (r.ok === false) return toast("删除失败：" + (r.error || "未知错误"));
   fillProviders();
   applyProvider("p0");
+  closeModal();
   toast("已删除该自定义配置");
 }
 
@@ -598,18 +723,31 @@ async function fetchModels() {
     api_key: $("cp-key").value.trim() || $("s-key").value.trim(),
   });
   if (!r.ok) return toast(r.message || "获取失败");
-  // 填进 datalist：模型 ID 输入框点一下就能选，不用手抄
-  const dl = $("cp-model-ids");
-  dl.innerHTML = "";
-  for (const id of r.models) dl.appendChild(new Option(id, id));
-  if (!(editing.models || []).length) {
-    editing.models = [newModelDraft(r.models[0])];
-    renderModels();
+  fetchedModels = Array.isArray(r.models) ? r.models : [];
+  if (!curModelId && fetchedModels.length) {
+    // 空手时给个默认选择：否则用户会对着空下拉不知道下一步
+    curModelId = fetchedModels[0];
+    $("cp-model").value = curModelId;
+    ensureModel(curModelId);
+    $("cp-detail-sec").open = true;
+    renderDetail();
   }
-  toast(`${r.message}：模型 ID 输入框可直接下拉选`);
+  renderModelMenu();
+  toast(`${r.message}：点「模型」右侧 ▾ 就能选`);
 }
 
-function initProviderEditor() {
+function initAdvanced() {
+  $("btn-advanced").addEventListener("click", () => openAdvanced(false));
+  $("adv-close").addEventListener("click", closeModal);
+  $("adv-modal").querySelector(".modal-backdrop")
+    .addEventListener("click", closeModal);
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || $("adv-modal").hidden) return;
+    // 候选菜单开着时，第一下 Esc 只收菜单，不关整个弹窗
+    if (!$("cp-model-menu").hidden) return;
+    closeModal();
+  });
+
   $("cp-eye").addEventListener("click", () => {
     const k = $("cp-key");
     k.type = k.type === "password" ? "text" : "password";
@@ -617,16 +755,50 @@ function initProviderEditor() {
   $("cp-save").addEventListener("click", saveProvider);
   $("cp-delete").addEventListener("click", deleteProvider);
   $("cp-fetch").addEventListener("click", fetchModels);
-  $("cp-add-model").addEventListener("click", () => {
-    if (!editing) return;
-    editing.models = editing.models || [];
-    editing.models.push(newModelDraft());
-    renderModels();
+  // 用「下面这张自定义服务商表单」里的地址和密钥测一次，不碰其他设置
+  $("cp-test").addEventListener("click", async () => {
+    const base = $("cp-base").value.trim();
+    if (!base) return toast("请先填写「API 地址」");
+    toast("正在测试连接…");
+    const r = await api.test({
+      ...collectSettings(),
+      base_url: base,
+      api_key: $("cp-key").value.trim() || $("s-key").value.trim(),
+      model: $("cp-model").value.trim() || $("s-model").value.trim(),
+    });
+    toast(r.message || (r.ok ? "连接成功" : "连接失败"));
   });
-  $("cp-cancel").addEventListener("click", () => {
-    const back = lastSel;
-    hideEditor();
-    applyProvider(back);
+  $("cp-cancel").addEventListener("click", closeModal);
+
+  // 模型可输入：输入过程中只记值并过滤候选；失焦/回车才落进目录、渲染参数区
+  $("cp-model").addEventListener("input", () => {
+    curModelId = $("cp-model").value.trim();
+    if (!$("cp-model-menu").hidden) renderModelMenu();
+  });
+  $("cp-model").addEventListener("focus", () => {
+    if (modelOptions().length) renderModelMenu();
+  });
+  $("cp-model").addEventListener("change", () => {
+    curModelId = $("cp-model").value.trim();
+    if (curModelId) {
+      ensureModel(curModelId);
+      $("cp-detail-sec").open = true;
+    }
+    renderDetail();
+    hideModelMenu();
+  });
+  $("cp-model-btn").addEventListener("click", (e) => {
+    e.preventDefault();
+    $("cp-model").focus();
+    if ($("cp-model-menu").hidden) renderModelMenu(); else hideModelMenu();
+  });
+  // 点别处收菜单（用 pointerdown，避免与候选按钮的 mousedown 抢先后）
+  document.addEventListener("pointerdown", (e) => {
+    if ($("adv-modal").hidden) return;
+    if (!e.target.closest(".combo")) hideModelMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !$("cp-model-menu").hidden) hideModelMenu();
   });
 }
 
@@ -638,7 +810,6 @@ function initGuide() {
   $("guide-try-mock").addEventListener("click", () => {
     $("s-mock").checked = true;
     $("guide-card").hidden = true;
-    $("adv").open = true;                        // 展开高级区，让用户看到勾选状态
     toast("已开启离线测试模式，选文件后点开始即可看排版效果");
   });
 }
