@@ -11,6 +11,8 @@
   --shadow: 0 2px 10px rgba(0,0,0,.07);
   --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
   --font-display: var(--font-ui);
+  --page-max: 1240px;      /* 两栏总宽；页头与主体共用，保证左右边缘对齐 */
+  --col-gap: 18px;         /* 两栏间距 */
 }
 
 * { box-sizing: border-box; }
@@ -23,7 +25,7 @@ body {
 /* ---- 页头 ---- */
 .app-header {
   display: flex; align-items: center; gap: 16px;
-  max-width: 860px; margin: 0 auto; padding: 22px 20px 6px;
+  max-width: var(--page-max); margin: 0 auto; padding: 22px 20px 6px;
 }
 .app-header h1 { margin: 0; font: 800 26px var(--font-display); }
 .tagline { margin: 2px 0 0; color: var(--c-text-muted); font-size: 13px; }
@@ -37,19 +39,20 @@ body {
 }
 .theme-switch button.active { border-color: var(--c-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-primary) 30%, transparent); }
 
-/* ---- 主体卡片 ---- */
-.app-main { max-width: 860px; margin: 0 auto; padding: 8px 20px 40px; }
+/* ---- 主体：宽屏左操作流 / 右设置面板两栏，窄屏回落单列 ---- */
+.app-main {
+  max-width: var(--page-max); margin: 0 auto; padding: 8px 20px 40px;
+  display: flex; gap: var(--col-gap); align-items: flex-start;
+}
+/* 每栏各自竖向排列，两栏高度互不牵连（用 gap 代替卡片 margin） */
+.app-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.app-col > .card { margin: 0; }
 .card {
   background: var(--c-surface); border: 1px solid var(--c-border);
   border-radius: var(--radius-lg); box-shadow: var(--shadow);
   padding: 18px 20px; margin: 14px 0;
 }
-.card h2 { margin: 0 0 12px; font: 700 17px var(--font-display); display: flex; align-items: center; gap: 8px; }
-.badge {
-  display: inline-grid; place-items: center; width: 26px; height: 26px;
-  border-radius: 50%; background: var(--c-primary); color: var(--c-primary-text);
-  font-size: 14px;
-}
+.card h2 { margin: 0 0 12px; font: 700 17px var(--font-display); }
 
 /* ---- 按钮 / 表单 ---- */
 .btn {
@@ -68,10 +71,19 @@ input, select {
   border: 1.5px solid var(--c-border); border-radius: var(--radius);
   background: var(--c-surface); color: var(--c-text);
 }
+/* 文本框与下拉框统一成同一高度：浏览器对 select 的字高计算和 input 不同，
+   不显式给高度时同一行里两者会差 2~3px，看起来像没对齐。 */
+input:not([type="checkbox"]):not([type="radio"]), select {
+  height: 38px; padding-top: 0; padding-bottom: 0;
+}
 input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--c-primary) 45%, transparent); }
-label { font-size: 13px; color: var(--c-text-muted); display: flex; flex-direction: column; gap: 4px; }
-label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--c-text); }
-label.check input { width: auto; }
+/* label 用 block 而不是 flex：flex 会把「标签文字」和它的 <small> 提示
+   拆成两行 flex 项，导致同一行的控件高高低低。block 下二者正常连排。 */
+label { font-size: 13px; color: var(--c-text-muted); display: block; }
+label > input, label > select { margin-top: 4px; }
+label > small { margin-left: 2px; }
+label.check { display: flex; align-items: center; gap: 6px; color: var(--c-text); }
+label.check input { width: auto; height: auto; margin-top: 0; }
 label.check.inline { display: inline-flex; white-space: nowrap; font-size: 13px; }
 .custom-input { margin-top: 6px; }
 /* 语言→模型推荐（内联，随选择变化；可点击切换服务） */
@@ -79,17 +91,28 @@ label.check.inline { display: inline-flex; white-space: nowrap; font-size: 13px;
   grid-column: 1 / -1; font-size: 13px; color: var(--c-text);
   background: color-mix(in srgb, var(--c-accent) 12%, var(--c-surface));
   border: 1px solid color-mix(in srgb, var(--c-accent) 40%, transparent);
-  border-radius: var(--radius); padding: 8px 12px; line-height: 1.6;
+  border-radius: var(--radius); padding: 8px 34px 8px 12px; line-height: 1.6;
+  position: relative;   /* 给右上角的关闭按钮定位 */
 }
+.reco-close {
+  position: absolute; top: 5px; right: 6px;
+  width: 22px; height: 22px; padding: 0; line-height: 1;
+  display: grid; place-items: center; border: none; cursor: pointer;
+  background: none; color: var(--c-text-muted);
+  font-size: 12px; border-radius: 50%;
+}
+.reco-close:hover { color: var(--c-text); background: color-mix(in srgb, var(--c-text) 12%, transparent); }
 .lang-reco b { color: var(--c-primary); }
 .lang-reco .reco-switch {
   color: var(--c-primary); cursor: pointer; text-decoration: underline;
   background: none; border: none; font: inherit; padding: 0;
 }
 .lang-reco .reco-note { color: var(--c-text-muted); font-size: 12px; }
-.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 14px; }
+/* 字段网格最多两列：三列时「试译前 N 页」这类标签会被压成两行。
+   align-items: end 让同一行里标签行数不同的控件底部对齐。 */
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; align-items: end; }
 .grid .wide { grid-column: 1 / -1; }
-.key-row { display: flex; gap: 6px; align-items: center; }
+.key-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
 .key-row input { flex: 1; }
 details { margin-top: 12px; }
 summary { cursor: pointer; color: var(--c-text-muted); font-size: 13px; margin-bottom: 8px; }
@@ -98,7 +121,8 @@ summary { cursor: pointer; color: var(--c-text-muted); font-size: 13px; margin-b
 /* ---- 首次使用引导 ---- */
 .guide-card { border-color: var(--c-primary); }
 .guide-card h2 { color: var(--c-primary); }
-.guide-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 12px 0 6px; }
+.guide-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0 6px; }
+.guide-options .guide-opt:last-child { grid-column: 1 / -1; }
 .guide-opt {
   background: var(--c-surface-2); border: 1px solid var(--c-border);
   border-radius: var(--radius); padding: 12px 14px; font-size: 13px;
@@ -150,6 +174,74 @@ summary { cursor: pointer; color: var(--c-text-muted); font-size: 13px; margin-b
 }
 .log:empty { display: none; }
 
+/* ---- 自定义供应商面板（高级选项内） ---- */
+.cp {
+  margin-top: 14px; padding: 14px 16px;
+  border: 1px solid var(--c-border); border-radius: var(--radius-lg);
+  background: var(--c-surface-2);
+}
+.cp-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 10px;
+}
+.cp-head b { font-size: 14px; color: var(--c-text); }
+.cp-del { color: var(--c-danger); border-color: currentColor; }
+.cp-sec { margin-top: 10px; }
+.cp-sec > summary { margin-bottom: 6px; }
+.cp-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 14px 0 8px;
+}
+.cp-bar b { font-size: 13px; color: var(--c-text); }
+.cp-model {
+  border: 1px solid var(--c-border); border-radius: var(--radius);
+  background: var(--c-surface); padding: 10px 12px; margin-bottom: 10px;
+}
+.cp-row { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+.cp-row > input { flex: 1; min-width: 0; }
+/* 档位/参数表：表头用 span、数据行用 input，必须共用同一套列宽规则，
+   否则表头文字会飘在两列之间（只看第一列内容宽度算宽度就会错位）。 */
+.cp-row-tier > * { flex: 1 1 0; min-width: 0; }
+.cp-row-tier > *:first-child { flex: 0 0 16px; width: 16px; }
+.cp-row-tier > *:last-child { flex: 0 0 30px; width: 30px; }
+.cp-thead { margin-bottom: 2px; }
+.cp-th { font-size: 12px; color: var(--c-text-muted); font-weight: 400; }
+.cp-table { margin-top: 8px; }
+.cp-line {
+  display: flex; align-items: center; gap: 10px;
+  margin: 10px 0 4px; flex-wrap: wrap;
+}
+.cp-lbl { font-size: 13px; color: var(--c-text-muted); }
+.cp-hint { font-size: 12px; color: var(--c-text-muted); }
+.cp-add { margin-top: 4px; }
+.cp-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.cp-empty { font-size: 13px; color: var(--c-text-muted); margin: 6px 0; }
+.cp-rm {
+  flex: none; width: 30px; height: 30px; padding: 0; cursor: pointer;
+  display: grid; place-items: center; font-size: 13px; line-height: 1;
+  border: 1.5px solid var(--c-border); border-radius: var(--radius);
+  background: var(--c-surface); color: var(--c-text-muted);
+}
+.cp-rm:hover { color: var(--c-danger); border-color: var(--c-danger); }
+
+/* 推理等级开关 */
+.switch { position: relative; display: inline-flex; width: 40px; height: 22px; flex: none; }
+.switch input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; opacity: 0; cursor: pointer;
+}
+.switch i {
+  width: 100%; height: 100%; border-radius: 99px;
+  background: var(--c-border); transition: background .18s;
+}
+.switch i::after {
+  content: ""; position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s;
+}
+.switch input:checked + i { background: var(--c-primary); }
+.switch input:checked + i::after { transform: translateX(18px); }
+
 /* ---- 其他 ---- */
 .app-footer { text-align: center; color: var(--c-text-muted); font-size: 12px; padding: 10px 0 26px; }
 .toast {
@@ -158,6 +250,18 @@ summary { cursor: pointer; color: var(--c-text-muted); font-size: 13px; margin-b
   border-radius: 99px; font-size: 13px; opacity: 0; transition: all .25s; pointer-events: none;
 }
 .toast.show { opacity: .95; transform: translateX(-50%) translateY(0); }
+
+/* 窗口放不下两栏时展开成单列：栏容器用 display:contents 退场，
+   让四张卡片直接排进主容器，再用 order 把「设置」提到「开始」之前，
+   保证竖排顺序仍是 选文件 → 设置 → 开始 的操作流。 */
+@media (max-width: 1020px) {
+  .app-main { flex-direction: column; gap: 14px; align-items: stretch; }
+  .app-col { display: contents; }
+  #file-card { order: 1; }
+  #guide-card { order: 2; }
+  #settings-card { order: 3; }
+  #run-card { order: 4; }
+}
 
 @media (max-width: 640px) {
   .grid { grid-template-columns: 1fr; }

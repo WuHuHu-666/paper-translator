@@ -19,6 +19,7 @@ export const api = {
   languages: () => j("/api/languages"),
   pick: (type = "pdf") => post("/api/pick", { type }),
   test: (o) => post("/api/test", o),
+  models: (o) => post("/api/models", o),
   start: (payload) => post("/api/jobs", payload),
   job: (id) => j("/api/jobs/" + id),
   cancel: (id) => post("/api/jobs/" + id + "/cancel"),

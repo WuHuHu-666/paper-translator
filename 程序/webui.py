@@ -28,7 +28,7 @@ from src.paths import resource  # noqa: E402
 
 WEB = resource("web")           # 打包后指向解包目录内的前端资源
 
-from src.config import load_config, save_config  # noqa: E402
+from src.config import CONFIG_PATH, load_config, save_config  # noqa: E402
 from src.pipeline import (  # noqa: E402
     SUPPORTED_EXTS,
     CancelledError,
@@ -246,6 +246,55 @@ def _os_open(target: str) -> None:
     subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", target])
 
 
+def _list_models(base_url: str, api_key: str = "") -> dict:
+    """拉取 OpenAI 兼容服务的模型清单（GET {base}/models）。
+
+    自定义供应商往往挂着几十个模型名，手抄必错，所以界面上给一个
+    「获取可用模型」按钮直接拉。兼容两种返回：
+      · OpenAI/DeepSeek/Kimi/智谱/豆包 → {"data": [{"id": "..."}]}
+      · Ollama 原生 /api/tags           → {"models": [{"name": "..."}]}
+    """
+    import requests
+
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        return {"ok": False, "message": "请先填写 API 地址"}
+    headers = {"Authorization": f"Bearer {api_key or 'local'}"}
+    last = ""
+    for url in (f"{base}/models", f"{base}/api/tags"):
+        try:
+            resp = requests.get(url, headers=headers, timeout=12)
+        except requests.RequestException as e:
+            last = f"网络请求失败：{e}"
+            continue
+        if resp.status_code in (401, 402, 403):
+            return {"ok": False,
+                    "message": f"服务返回 {resp.status_code}：Key 无效或无权限"
+                               "（本地服务可把 Key 留空重试）"}
+        if resp.status_code != 200:
+            last = f"HTTP {resp.status_code}：{resp.text[:120]}"
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            last = "返回的不是 JSON"
+            continue
+        rows = data.get("data") or data.get("models") or []
+        ids = []
+        for r in rows:
+            if isinstance(r, dict):
+                name = r.get("id") or r.get("name") or r.get("model")
+                if name:
+                    ids.append(str(name))
+            elif isinstance(r, str):
+                ids.append(r)
+        ids = sorted(dict.fromkeys(ids))
+        if ids:
+            return {"ok": True, "models": ids, "message": f"拿到 {len(ids)} 个模型"}
+        last = "服务没有返回任何模型"
+    return {"ok": False, "message": last or "获取失败"}
+
+
 # ---------------------------------------------------------------------------
 # HTTP 处理
 # ---------------------------------------------------------------------------
@@ -319,7 +368,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._static(unquote(path[5:]))
         if path == "/api/config":
             cfg = load_config()
-            return self._json(cfg.to_dict())
+            data = cfg.to_dict()
+            # 界面首次打开（还没落过 config.json）时的默认方向给 中文→英文；
+            # 用户保存过一次之后就以 config.json 为准，不再覆盖。
+            # 不改内核 DEFAULTS：那里的 auto→zh 是 CLI 与文本类用例的契约。
+            if not CONFIG_PATH.exists():
+                data["source_lang"] = "zh"
+                data["target_lang"] = "en"
+            return self._json(data)
         if path == "/api/themes":
             try:
                 reg = json.loads((WEB / "themes" / "themes.json")
@@ -364,6 +420,13 @@ class Handler(BaseHTTPRequestHandler):
             cfg = load_config(**{k: v for k, v in body.items() if v is not None})
             ok, msg = check_connection(cfg)
             return self._json({"ok": ok, "message": msg})
+
+        if path == "/api/models":
+            # 只用于「获取可用模型」：把用户填的地址和 Key 拿去问一次模型清单。
+            # 与 /api/test 同级别风险（同样会带 Key 访问用户指定的地址），
+            # 因此同样受 _trusted() + 自定义请求头保护。
+            return self._json(_list_models(body.get("base_url", ""),
+                                           body.get("api_key", "")))
 
         if path == "/api/jobs":
             files = [f for f in body.get("files", []) if Path(f).is_file()

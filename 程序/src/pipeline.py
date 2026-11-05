@@ -203,6 +203,7 @@ def make_translator(cfg: Config, mock: bool = False,
         cache_scope=scope,
         domain=getattr(cfg, "domain", "计算机科学"),
         doc_context=doc_context,
+        extra_params=cfg.model_extra_params(),
     )
     # 强制重译：无视旧缓存重新翻译，但把新结果写回覆盖旧的（修复坏缓存）
     tr.cache_refresh = bool(getattr(cfg, "refresh_cache", False))
@@ -433,6 +434,7 @@ def check_connection(cfg: Config) -> Tuple[bool, str]:
             temperature=cfg.temperature, max_retries=1, timeout=30,
             proxy=cfg.proxy, use_system_proxy=cfg.use_system_proxy,
             verify_ssl=cfg.verify_ssl, thinking=cfg.thinking,
+            extra_params=cfg.model_extra_params(),
         )
         out = tr._chat([
             {"role": "system", "content": "You are a translator."},

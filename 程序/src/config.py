@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from .paths import data_file, resource_dir, user_path
 
@@ -26,6 +27,9 @@ DEFAULTS = {
     "model": "deepseek-v4-pro",
     "temperature": 1.0,
     # B5 多语言：源/目标用语言代码（auto/en/zh/ja/ko/de/fr/es/ru/pt/it）
+    # 注意：这里是内核默认（auto→zh）。界面首次打开时想要的默认方向
+    # （中文→英文）由 webui 在 /api/config 里注入，不在这里改 ——
+    # 改这里会连带翻转 CLI 与全部文本类用例的默认语义。
     "source_lang": "auto",
     "target_lang": "zh",
     # translated = 纯译文（覆盖原文）；bilingual = 双语对照（原文页 + 译文页）
@@ -66,7 +70,39 @@ DEFAULTS = {
     # 计费单价（元/百万 token，用于翻译前成本预估显示；0=只显示 token 数）
     "price_in": 0.0,
     "price_out": 0.0,
+    # 自定义供应商（界面上「增加自定义配置」保存的，可存多个）：
+    # [{id, name, base_url, protocol, api_key, models: [{id, context, max_output,
+    #   inputs: ["text","image"], reasoning: {enabled, key, active, tiers: [{level, value}]},
+    #   params: [{key, value}]}]}]
+    "custom_providers": [],
+    # 当前选中的供应商：预设供应商留空，自定义供应商存其 id（用于精确回填）
+    "provider_id": "",
 }
+
+
+def _coerce(v: Any) -> Any:
+    """把界面输入的字符串推断成合适的 JSON 类型。
+
+    自定义参数都是文本框输进来的（"0.95"、"42"、"true"），原样发出去会变成
+    字符串，部分服务会直接 400。这里做一次轻量推断，其余原样返回。
+    注：故意不把 "01"、"1e5" 之类当数字以外的特例处理——推断失败就是字符串。
+    """
+    if not isinstance(v, str):
+        return v
+    s = v.strip()
+    low = s.lower()
+    if low in ("true", "false"):
+        return low == "true"
+    if low == "null":
+        return None
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        return s
 
 
 @dataclass
@@ -75,6 +111,8 @@ class Config:
     base_url: str = "https://api.deepseek.com"
     model: str = "deepseek-v4-pro"
     temperature: float = 1.0
+    # 内核契约仍是 en→zh：Config() 直接构造（测试、库调用）沿用这对默认值；
+    # 界面/CLI 的默认方向由上面 DEFAULTS 决定，二者刻意分开。
     source_lang: str = "auto"
     target_lang: str = "zh"
     output_mode: str = "translated"
@@ -99,6 +137,9 @@ class Config:
     formula_char_pattern: str = ""
     price_in: float = 0.0
     price_out: float = 0.0
+    # 自定义供应商列表 + 当前选中项（详见 DEFAULTS 里的结构说明）
+    custom_providers: List[dict] = field(default_factory=list)
+    provider_id: str = ""
 
     def resolved_glossary_path(self) -> Path:
         p = Path(self.glossary_path)
@@ -106,6 +147,63 @@ class Config:
             return p
         # 相对路径：优先用用户自己编辑过的副本，否则用随程序分发的默认术语库
         return data_file(*p.parts)
+
+    # ---- 自定义供应商 / 模型参数 ----
+    def provider(self) -> Optional[dict]:
+        """当前选中的自定义供应商；没选或已被删除时返回 None。"""
+        items = [p for p in (self.custom_providers or []) if isinstance(p, dict)]
+        if self.provider_id:
+            for p in items:
+                if p.get("id") == self.provider_id:
+                    return p
+        # 旧配置（没有 provider_id）按接口地址兜底匹配，避免选了没反应
+        base = (self.base_url or "").rstrip("/")
+        if base:
+            for p in items:
+                if (p.get("base_url") or "").rstrip("/") == base:
+                    return p
+        return None
+
+    def model_entry(self) -> Optional[dict]:
+        """当前模型的配置项（上下文窗口 / 附带参数等）；非自定义供应商时 None。"""
+        prov = self.provider()
+        if not prov:
+            return None
+        for m in prov.get("models") or []:
+            if isinstance(m, dict) and (m.get("id") or "") == self.model:
+                return m
+        return None
+
+    def model_extra_params(self) -> Dict[str, Any]:
+        """要附加进请求体的模型参数（自定义供应商才有）。
+
+        两块来源：
+          · reasoning —— 推理档位，开启时取 active 档的 value；
+          · params    —— 用户手填的键值对（如 top_p=0.95、seed=42）。
+        空键/空值直接丢弃；值做一次轻量类型推断，免得 0.95 被当字符串发出去。
+        """
+        m = self.model_entry()
+        if not m:
+            return {}
+        out: Dict[str, Any] = {}
+        r = m.get("reasoning") or {}
+        if isinstance(r, dict) and r.get("enabled"):
+            key = str(r.get("key") or "reasoning_effort").strip()
+            tiers = [t for t in (r.get("tiers") or []) if isinstance(t, dict)]
+            active = r.get("active")
+            chosen = next((t for t in tiers if t.get("level") == active),
+                          tiers[0] if tiers else None)
+            val = (chosen or {}).get("value")
+            if key and val not in (None, ""):
+                out[key] = _coerce(val)
+        for item in m.get("params") or []:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("key") or "").strip()
+            val = item.get("value")
+            if key and val not in (None, ""):
+                out[key] = _coerce(val)
+        return out
 
     def to_dict(self) -> dict:
         return asdict(self)

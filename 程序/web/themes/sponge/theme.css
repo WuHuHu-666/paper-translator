@@ -73,7 +73,9 @@ body::after {
 /* ---- 卡通化控件 ---- */
 .card { border-width: 2.5px; }
 h1 { color: #7a4e00; text-shadow: 0 2px 0 rgba(255,255,255,.7); letter-spacing: 1px; }
-.badge { background: var(--c-accent); color: #fff; box-shadow: 0 2px 0 rgba(94,66,0,.25); }
+/* 引导卡标题用的是 --c-primary，本皮肤下是亮黄 #ffd93d，压在米白卡面上几乎看不清，
+   换成深琥珀（保持卡通调性但保证对比度）。 */
+.guide-card h2 { color: #a8700a; text-shadow: 0 2px 0 rgba(255,255,255,.75); }
 .btn { border-width: 2.5px; box-shadow: 0 3px 0 rgba(94, 66, 0, .18); }
 .btn:hover:not(:disabled) { transform: translateY(-2px) rotate(-.5deg); }
 .btn:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 1px 0 rgba(94,66,0,.18); }

@@ -287,6 +287,7 @@ class DeepSeekTranslator(BaseTranslator):
         cache_scope: str = "",
         domain: str = "计算机科学",
         doc_context: str = "",
+        extra_params: Optional[dict] = None,
     ):
         super().__init__(batch_size=batch_size, max_workers=max_workers,
                          persist=persist, cache_scope=cache_scope)
@@ -300,6 +301,9 @@ class DeepSeekTranslator(BaseTranslator):
         self.max_retries = max_retries
         self.verify_ssl = verify_ssl
         self.thinking = thinking  # 开=质量优先（更准更慢），关=提速；应用默认开（见 config.py），此参数默认关仅为直接构造时的保守回退
+        # 自定义供应商的附加模型参数（如 reasoning_effort / top_p），直接平铺进请求体。
+        # 只允许补充，不允许覆盖 model / messages / temperature 等核心字段（见 _chat）。
+        self.extra_params = dict(extra_params or {})
         # B5 多语言：source_lang/target_lang 为语言代码（auto/en/zh/ja…）
         from . import languages as _L
         self.source_code = source_lang or "auto"
@@ -331,14 +335,17 @@ class DeepSeekTranslator(BaseTranslator):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
-        payload = {
+        # 先铺用户附加参数，再覆盖核心字段：自定义参数只能"补充"，
+        # 不能把 model / messages / temperature 改掉（那是配置里另一个字段管的事）。
+        payload = dict(self.extra_params)
+        payload.update({
             "model": self.model,
             "messages": messages,
             "temperature": self.temperature,
             "stream": False,
             # 关闭思考链（默认开启会先生成推理再翻译，非常慢）
             "thinking": {"type": "enabled" if self.thinking else "disabled"},
-        }
+        })
         last_err = None
         attempt = 0
         while attempt < self.max_retries:
@@ -356,18 +363,34 @@ class DeepSeekTranslator(BaseTranslator):
                         f"翻译服务返回了空内容或无法识别的格式：{_short(resp.text)}")
                 # 兼容非 DeepSeek 服务（Kimi/GLM/豆包/OpenAI/Ollama…）：
                 # "thinking" 是 DeepSeek 风格参数，严格校验的服务会报 400
-                # （OpenAI 明确回 "Unrecognized request argument supplied: thinking"），
-                # 去掉该字段立刻重试一次。
+                # （OpenAI 明确回 "Unrecognized request argument supplied: thinking"）；
+                # 用户附加的模型参数（reasoning_effort/top_p…）同理，某家服务不认
+                # 这个字段时也会 400。两种都剥掉再发，别让一个拼错的参数名把整篇
+                # 翻译打死。
                 #
-                # ⚠️ 这次重试**不计入重试次数**。计入的话，联通性预检（用的是
-                # max_retries=1）会把仅有的一次机会花在注定被拒的首个请求上，
-                # 剥掉字段后的重试根本发不出去 → 预检必然失败在"翻译请求失败。"
-                # 上。而预检是翻译的强制闸门，等于整个工具对所有严格校验参数的
-                # 服务（OpenAI 等）完全不可用。
-                # 本分支至多触发一次：剥掉字段后条件不再成立，不会死循环。
-                elif resp.status_code == 400 and "thinking" in payload:
-                    payload = {k: v for k, v in payload.items() if k != "thinking"}
-                    continue
+                # 优先按服务点名的字段剥（省一次往返）：附加参数是用户手填的，
+                # 名字错了先剥它，而不是把 DeepSeek 的 thinking 也一起丢掉。
+                # 没点名就退回"先 thinking 后附加参数"的固定顺序（老行为）。
+                #
+                # ⚠️ 这些重试**不计入重试次数**（continue 跳过 attempt 自增）。
+                # 计入的话，联通性预检（用的是 max_retries=1）会把仅有的一次机会
+                # 花在注定被拒的首个请求上，剥掉字段后的重试根本发不出去 → 预检
+                # 必然失败在"翻译请求失败。"上。而预检是翻译的强制闸门，等于整个
+                # 工具对所有严格校验参数的服务（OpenAI 等）完全不可用。
+                # 每个字段至多剥一次，剥完条件不再成立，不会死循环。
+                elif resp.status_code == 400:
+                    droppable = [k for k in payload
+                                 if k == "thinking" or k in self.extra_params]
+                    hit = _unsupported_key(resp.text, droppable)
+                    if not hit:
+                        hit = ("thinking" if "thinking" in payload else
+                               next((k for k in self.extra_params if k in payload), None))
+                    if hit:
+                        payload = {k: v for k, v in payload.items() if k != hit}
+                        continue
+                    # 没有可剥的字段了：按普通失败处理，别吞掉服务给的原因
+                    last_err = TranslatorError(
+                        f"HTTP 400: {_short(resp.text)}")
                 # 明确的客户端错误不重试
                 elif resp.status_code in (401, 402, 403):
                     raise TranslatorError(
@@ -525,6 +548,20 @@ def _content_of(resp) -> Optional[str]:
     except (ValueError, KeyError, IndexError, TypeError):
         return None
     return content if isinstance(content, str) else None
+
+
+def _unsupported_key(body: str, candidates) -> Optional[str]:
+    """从 400 响应正文里认出服务拒收的字段名，认不出返回 None。
+
+    OpenAI 风格的服务会点名（"Unrecognized request argument supplied: top_p"），
+    能直接剥对字段，省掉一次注定失败的往返；只回 "invalid request" 的认不出来，
+    由调用方按固定顺序兜底。
+    """
+    text = (body or "").lower()
+    for key in candidates:
+        if key and key.lower() in text:
+            return key
+    return None
 
 
 def _retry_after(resp) -> float:

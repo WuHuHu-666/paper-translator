@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>论文翻译工具</title>
+<title>文档翻译</title>
 <link rel="stylesheet" href="/web/css/base.css">
 <link rel="stylesheet" href="/web/themes/sponge/theme.css" id="theme-css">
 </head>
@@ -12,159 +12,215 @@
 <header class="app-header">
   <div class="mascot" aria-hidden="true"></div>
   <div class="head-text">
-    <h1>论文翻译工具</h1>
-    <p class="tagline">英文论文 → 中文 · 保留排版公式图片 · 参考文献不乱动</p>
+    <h1>文档翻译</h1>
+    <p class="tagline">PDF · Word · PPT 等文档 · 保留排版公式图片 · 参考文献不乱动</p>
   </div>
   <div class="theme-switch" id="theme-switch" title="换皮肤"></div>
 </header>
 
+<!-- 宽屏左右两栏：左列=操作流（选文件→开始），右列=设置面板；
+     窄屏两列展开成一列，顺序由 base.css 里的 order 回调为 选文件→设置→开始 -->
 <main class="app-main">
 
-  <!-- ① 文件篮 -->
-  <section class="card" id="file-card">
-    <h2><span class="badge">①</span> 选择文件</h2>
-    <div class="file-actions">
-      <button class="btn btn-primary" id="btn-pick">＋ 选择文件…</button>
-      <button class="btn" id="btn-clear">清空</button>
-      <span class="hint">可多选；输出默认保存在原文件旁边</span>
-    </div>
-    <ul class="file-list" id="file-list"></ul>
-  </section>
+  <div class="app-col" id="col-main">
 
-  <!-- 首次使用引导：仅在未配置 Key 时显示 -->
-  <section class="card guide-card" id="guide-card" hidden>
-    <h2>👋 首次使用？只差一个 API Key</h2>
-    <p>本工具用大模型翻译，需要一个「钥匙」(API Key) 才能联网翻译。三选一：</p>
-    <div class="guide-options">
-      <div class="guide-opt">
-        <b>① 用 DeepSeek（推荐）</b>
-        <p>中文好、最便宜，一篇 15 页论文通常几毛钱。</p>
-        <a href="https://platform.deepseek.com/api_keys" target="_blank"
-           rel="noopener">→ 去申请 Key（sk- 开头）</a>
-        <p class="muted">申请后需充少量金额（如 10 元）。把 Key 填到下方即可。</p>
+    <!-- 文件篮 -->
+    <section class="card" id="file-card">
+      <h2>选择文件</h2>
+      <div class="file-actions">
+        <button class="btn btn-primary" id="btn-pick">＋ 选择文件…</button>
+        <button class="btn" id="btn-clear">清空</button>
+        <span class="hint">可多选；输出默认保存在原文件旁边</span>
       </div>
-      <div class="guide-opt">
-        <b>② 完全免费 · 离线</b>
-        <p>装 Ollama 跑本地模型，一分钱不花、数据不出电脑，质量略低。</p>
-        <a href="https://ollama.com" target="_blank" rel="noopener">→ 下载 Ollama</a>
-        <p class="muted">装好后在「服务」里选 Ollama 本地，无需 Key。</p>
-      </div>
-      <div class="guide-opt">
-        <b>③ 先看看效果</b>
-        <p>不花钱、不联网，用占位文字看看排版还原得怎么样。</p>
-        <button class="btn btn-sm" id="guide-try-mock">试试离线模式</button>
-        <p class="muted">勾选下方「离线测试」也是同样效果。</p>
-      </div>
-    </div>
-    <button class="guide-dismiss" id="guide-dismiss" title="我已了解，不再显示">
-      我已了解 ✕</button>
-  </section>
+      <ul class="file-list" id="file-list"></ul>
+    </section>
 
-  <!-- ② 设置 -->
-  <section class="card" id="settings-card">
-    <h2><span class="badge">②</span> 翻译设置</h2>
-    <div class="grid" id="settings-basic">
-      <label>源语言
-        <select id="s-source"></select>
-      </label>
-      <label>目标语言
-        <select id="s-target"></select>
-      </label>
-      <div class="lang-reco" id="lang-reco" hidden></div>
-      <label>服务
-        <select id="s-service"></select>
-      </label>
-      <label>模型
-        <select id="s-model"></select>
-        <input id="s-model-custom" class="custom-input" placeholder="输入模型名"
-               hidden>
-      </label>
-      <label class="wide">API Key
-        <span class="key-row">
-          <input type="password" id="s-key" placeholder="sk-…（DeepSeek 官网申请）">
-          <button class="btn btn-sm" id="btn-eye" title="显示/隐藏">👁</button>
-          <label class="check inline"><input type="checkbox" id="s-remember"
-                 checked> 记住</label>
-          <button class="btn btn-sm" id="btn-test">测试连接</button>
-        </span>
-      </label>
-      <label>输出模式
-        <select id="s-mode">
-          <option value="translated">纯中文</option>
-          <option value="bilingual">双语 · 前后页</option>
-          <option value="sidebyside">双语 · 左右对照</option>
-          <option value="updown">双语 · 上下对照（字最大）</option>
-        </select>
-      </label>
-      <label>领域
-        <select id="s-domain"></select>
-        <input id="s-domain-custom" class="custom-input" placeholder="输入学科名"
-               hidden>
-      </label>
-      <label>试译前 N 页 <small>(0=整篇)</small>
-        <input type="number" id="s-trial" min="0" max="999" value="0">
-      </label>
-      <label>指定页码 <small>(留空=不限；填了则忽略左侧)</small>
-        <input id="s-page-range" placeholder="如 1-3,5,8-">
-      </label>
-      <label class="wide">术语库 CSV
-        <span class="key-row">
-          <input id="s-glossary" placeholder="glossary/cs_terms.csv">
-          <button class="btn btn-sm" id="btn-glossary">浏览…</button>
-        </span>
-      </label>
-      <label class="wide">输出到
-        <span class="key-row">
-          <label class="check inline"><input type="radio" name="outloc"
-                 id="s-out-same" value="same" checked> 原文件同目录</label>
-          <label class="check inline"><input type="radio" name="outloc"
-                 id="s-out-custom" value="custom"> 指定：</label>
-          <input id="s-outdir" placeholder="点右侧浏览选择文件夹">
-          <button class="btn btn-sm" id="btn-outdir">浏览…</button>
-        </span>
-      </label>
-    </div>
-    <details id="adv">
-      <summary>高级选项</summary>
-      <div class="grid">
-        <label class="wide">接口地址
-          <input id="s-baseurl">
+    <!-- 首次使用引导：仅在未配置 Key 时显示 -->
+    <section class="card guide-card" id="guide-card" hidden>
+      <h2>👋 首次使用？只差一个 API Key</h2>
+      <p>本工具用大模型翻译，需要一个「钥匙」(API Key) 才能联网翻译。三选一：</p>
+      <div class="guide-options">
+        <div class="guide-opt">
+          <b>① 用 DeepSeek（推荐）</b>
+          <p>中文好、最便宜，一篇 15 页论文通常几毛钱。</p>
+          <a href="https://platform.deepseek.com/api_keys" target="_blank"
+             rel="noopener">→ 去申请 Key（sk- 开头）</a>
+          <p class="muted">申请后需充少量金额（如 10 元）。把 Key 填到「高级选项 → API Key」即可。</p>
+        </div>
+        <div class="guide-opt">
+          <b>② 完全免费 · 离线</b>
+          <p>装 Ollama 跑本地模型，一分钱不花、数据不出电脑，质量略低。</p>
+          <a href="https://ollama.com" target="_blank" rel="noopener">→ 下载 Ollama</a>
+          <p class="muted">装好后在「服务」里选 Ollama 本地，无需 Key。</p>
+        </div>
+        <div class="guide-opt">
+          <b>③ 先看看效果</b>
+          <p>不花钱、不联网，用占位文字看看排版还原得怎么样。</p>
+          <button class="btn btn-sm" id="guide-try-mock">试试离线模式</button>
+          <p class="muted">勾选「离线测试」也是同样效果。</p>
+        </div>
+      </div>
+      <button class="guide-dismiss" id="guide-dismiss" title="我已了解，不再显示">
+        我已了解 ✕</button>
+    </section>
+
+    <!-- 运行 -->
+    <section class="card" id="run-card">
+      <h2>开始</h2>
+      <div class="run-bar">
+        <button class="btn btn-primary btn-big" id="btn-start">▶ 开始翻译</button>
+        <button class="btn" id="btn-cancel" disabled>取消</button>
+        <span class="status" id="status-line">就绪。</span>
+      </div>
+      <div class="progress-card" id="progress-card">
+        <div class="mascot small" aria-hidden="true"></div>
+        <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+        <span class="pct" id="pct">0%</span>
+      </div>
+      <ul class="results" id="results"></ul>
+      <pre class="log" id="log" aria-label="日志"></pre>
+    </section>
+
+  </div>
+
+  <div class="app-col app-col-side" id="col-side">
+
+    <!-- 设置 -->
+    <section class="card" id="settings-card">
+      <h2>翻译设置</h2>
+      <div class="grid" id="settings-basic">
+        <label>源语言
+          <select id="s-source"></select>
         </label>
-        <label>并发数
-          <input type="number" id="s-workers" min="1" max="32" value="8">
+        <label>目标语言
+          <select id="s-target"></select>
         </label>
-        <label>回填后端
-          <select id="s-backend">
-            <option value="auto">自动（推荐）</option>
-            <option value="pymupdf">PyMuPDF·精确抹除</option>
-            <option value="reportlab">reportlab·兼容覆盖</option>
+        <div class="lang-reco" id="lang-reco" hidden></div>
+        <label>服务
+          <select id="s-service"></select>
+        </label>
+        <label>模型
+          <select id="s-model"></select>
+        </label>
+        <label>输出模式
+          <select id="s-mode">
+            <option value="translated">纯中文</option>
+            <option value="bilingual">双语 · 前后页</option>
+            <option value="sidebyside">双语 · 左右对照</option>
+            <option value="updown">双语 · 上下对照（字最大）</option>
           </select>
         </label>
-        <label class="check"><input type="checkbox" id="s-thinking"> 思考模式（更准更慢）</label>
-        <label class="check"><input type="checkbox" id="s-direct"> 直连（SSL 报错时勾选）</label>
-        <label class="check"><input type="checkbox" id="s-mock"> 离线测试（不花钱看排版）</label>
-        <label class="check"><input type="checkbox" id="s-refresh"> 忽略缓存重新翻译（上次结果不对时勾选）</label>
-        <label class="check"><input type="checkbox" id="s-auto-glossary" checked> 本文术语表（抽取全文高频术语，全篇统一译名）</label>
+        <label>领域
+          <select id="s-domain"></select>
+          <input id="s-domain-custom" class="custom-input" placeholder="输入学科名"
+                 hidden>
+        </label>
+        <label>试译前 N 页 <small>(0=整篇)</small>
+          <input type="number" id="s-trial" min="0" max="999" value="0">
+        </label>
+        <label title="留空=不限制页数；填了页码范围则忽略「试译前 N 页」">指定页码 <small>(留空=不限)</small>
+          <input id="s-page-range" placeholder="如 1-3,5,8-">
+        </label>
+        <label class="wide">输出到
+          <span class="key-row">
+            <label class="check inline"><input type="radio" name="outloc"
+                   id="s-out-same" value="same" checked> 原文件同目录</label>
+            <label class="check inline"><input type="radio" name="outloc"
+                   id="s-out-custom" value="custom"> 指定：</label>
+            <input id="s-outdir" placeholder="点右侧浏览选择文件夹">
+            <button class="btn btn-sm" id="btn-outdir">浏览…</button>
+          </span>
+        </label>
       </div>
-    </details>
-  </section>
+      <details id="adv">
+        <summary>高级选项</summary>
+        <div class="grid">
+          <label class="wide">术语库 CSV
+            <span class="key-row">
+              <input id="s-glossary" placeholder="glossary/cs_terms.csv">
+              <button class="btn btn-sm" id="btn-glossary">浏览…</button>
+            </span>
+          </label>
+          <label class="wide">API Key
+            <span class="key-row">
+              <input type="password" id="s-key" placeholder="sk-…（DeepSeek 官网申请）">
+              <button class="btn btn-sm" id="btn-eye" title="显示/隐藏">👁</button>
+              <label class="check inline"><input type="checkbox" id="s-remember"
+                     checked> 记住</label>
+              <button class="btn btn-sm" id="btn-test">测试连接</button>
+            </span>
+          </label>
+          <label class="wide">接口地址
+            <input id="s-baseurl">
+          </label>
+          <label>并发数
+            <input type="number" id="s-workers" min="1" max="32" value="8">
+          </label>
+          <label>回填后端
+            <select id="s-backend">
+              <option value="auto">自动（推荐）</option>
+              <option value="pymupdf">PyMuPDF·精确抹除</option>
+              <option value="reportlab">reportlab·兼容覆盖</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="s-thinking"> 思考模式（更准更慢）</label>
+          <label class="check"><input type="checkbox" id="s-direct"> 直连（SSL 报错时勾选）</label>
+          <label class="check"><input type="checkbox" id="s-mock"> 离线测试（不花钱看排版）</label>
+          <label class="check"><input type="checkbox" id="s-refresh"> 忽略缓存重新翻译（上次结果不对时勾选）</label>
+          <label class="check"><input type="checkbox" id="s-auto-glossary" checked> 本文术语表（抽取全文高频术语，全篇统一译名）</label>
+        </div>
 
-  <!-- ③ 运行 -->
-  <section class="card" id="run-card">
-    <h2><span class="badge">③</span> 开始</h2>
-    <div class="run-bar">
-      <button class="btn btn-primary btn-big" id="btn-start">▶ 开始翻译</button>
-      <button class="btn" id="btn-cancel" disabled>取消</button>
-      <span class="status" id="status-line">就绪。</span>
-    </div>
-    <div class="progress-card" id="progress-card">
-      <div class="mascot small" aria-hidden="true"></div>
-      <div class="bar-wrap"><div class="bar" id="bar"></div></div>
-      <span class="pct" id="pct">0%</span>
-    </div>
-    <ul class="results" id="results"></ul>
-    <pre class="log" id="log" aria-label="日志"></pre>
-  </section>
+        <!-- 自定义供应商编辑面板：选「＋ 增加自定义配置」或已保存的自定义供应商时显示。
+             模型目录由 components.js 渲染（可增删模型/档位/参数）。 -->
+        <section class="cp" id="cp-editor" hidden>
+          <header class="cp-head">
+            <b id="cp-title">新自定义配置</b>
+            <button class="btn btn-sm cp-del" id="cp-delete" hidden>删除</button>
+          </header>
+
+          <label class="wide">API 密钥
+            <span class="key-row">
+              <input type="password" id="cp-key" placeholder="留空则沿用上方 API Key">
+              <button class="btn btn-sm" id="cp-eye" title="显示/隐藏">👁</button>
+            </span>
+          </label>
+
+          <details class="cp-sec" open>
+            <summary>自定义设置</summary>
+            <div class="grid">
+              <label>显示名称
+                <input id="cp-name" placeholder="如 strata（显示在供应商下拉里）">
+              </label>
+              <label>API 协议
+                <select id="cp-protocol">
+                  <option value="openai" title="OpenAI 兼容：POST {base}/chat/completions">OpenAI 兼容 · Chat</option>
+                </select>
+              </label>
+              <label class="wide">API 地址
+                <input id="cp-base" placeholder="http://192.168.10.201:8080/v1">
+              </label>
+            </div>
+          </details>
+
+          <div class="cp-bar">
+            <b>模型目录</b>
+            <span class="cp-bar-actions">
+              <button class="btn btn-sm" id="cp-fetch">获取可用模型</button>
+            </span>
+          </div>
+          <datalist id="cp-model-ids"></datalist>
+          <div id="cp-models"></div>
+          <button class="btn btn-sm cp-add" id="cp-add-model">＋ 添加模型</button>
+
+          <footer class="cp-foot">
+            <button class="btn" id="cp-cancel">取消</button>
+            <button class="btn btn-primary" id="cp-save">保存</button>
+          </footer>
+        </section>
+      </details>
+    </section>
+
+  </div>
 
 </main>
 
